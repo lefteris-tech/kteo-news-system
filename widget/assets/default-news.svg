@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="#1a1f29"/>
+            <stop offset="100%" stop-color="#0d1117"/>
+        </linearGradient>
+        <linearGradient id="paper" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stop-color="#2a3140"/>
+            <stop offset="100%" stop-color="#1f2530"/>
+        </linearGradient>
+    </defs>
+
+    <!-- Background -->
+    <rect width="800" height="600" fill="url(#bg)"/>
+
+    <!-- Newspaper icon centered -->
+    <g transform="translate(400, 300)">
+        <!-- Paper -->
+        <rect x="-150" y="-110" width="300" height="220" rx="8" ry="8"
+              fill="url(#paper)" stroke="#3a4150" stroke-width="2"/>
+
+        <!-- Masthead -->
+        <rect x="-130" y="-92" width="260" height="34" fill="#ff5722" rx="3"/>
+        <text x="-120" y="-68" font-family="Helvetica, Arial, sans-serif"
+              font-weight="700" font-size="22" fill="#fff"
+              letter-spacing="2">NEWS</text>
+
+        <!-- Headline lines -->
+        <rect x="-130" y="-44" width="260" height="6" fill="#5a6270" rx="2"/>
+        <rect x="-130" y="-30" width="180" height="6" fill="#5a6270" rx="2"/>
+
+        <!-- Body lines -->
+        <rect x="-130" y="-8"  width="120" height="4" fill="#3a4150" rx="2"/>
+        <rect x="-130" y="2"   width="120" height="4" fill="#3a4150" rx="2"/>
+        <rect x="-130" y="12"  width="120" height="4" fill="#3a4150" rx="2"/>
+        <rect x="-130" y="22"  width="120" height="4" fill="#3a4150" rx="2"/>
+        <rect x="-130" y="32"  width="100" height="4" fill="#3a4150" rx="2"/>
+
+        <!-- Image placeholder -->
+        <rect x="0" y="-8" width="130" height="80" fill="#3a4150" rx="3"/>
+        <circle cx="30" cy="20" r="8" fill="#5a6270"/>
+        <polygon points="55,40 75,15 95,32 130,5 130,72 0,72" fill="#5a6270" opacity="0.6"/>
+    </g>
+
+    <!-- Subtle label -->
+    <text x="400" y="500" font-family="Helvetica, Arial, sans-serif"
+          font-size="16" fill="#5a6270" text-anchor="middle"
+          letter-spacing="3">NO IMAGE AVAILABLE</text>
+</svg>

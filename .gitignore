@@ -1,0 +1,83 @@
+# =============================================================================
+# KTEO News System — .gitignore
+# =============================================================================
+
+# ----- Secrets & local config -----
+.env
+.env.local
+*.key
+*.pem
+**/news_aggregator.env
+**/.cloudflared/*.json
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ----- Virtual environments -----
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ----- IDE / Editor -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ----- Runtime data -----
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+news_cache.db
+news_cache.db.bak.*
+
+# ----- Logs -----
+*.log
+logs/
+/var/log/news_aggregator.log
+
+# ----- Generated XML feeds (output, not source) -----
+/var/www/html/national.xml
+/var/www/html/international.xml
+/var/www/html/economy.xml
+/var/www/html/lifestyle.xml
+/var/www/html/auto.xml
+/var/www/html/sports.xml
+/var/www/html/*.archive.xml
+
+# ----- Backups -----
+backups/
+*.bak
+*.bak.*
+*.backup
+snapshot.tar.gz
+kteo-snapshot*
+
+# ----- Streamlit -----
+.streamlit/secrets.toml
+
+# ----- Test / coverage -----
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ----- OS clutter -----
+*.tmp
+*.temp

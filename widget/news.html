@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>KTEO Autovision News</title>
+
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma"        content="no-cache">
+    <meta http-equiv="Expires"       content="0">
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="theme-dark layout-horizontal">
+
+    <div id="stage" class="stage" aria-live="polite"></div>
+
+    <div id="overlay" class="overlay">
+        <div class="loader"></div>
+        <p class="status-text">Φόρτωση ειδήσεων…</p>
+    </div>
+
+    <div id="error-screen" class="error-screen" hidden>
+        <div class="error-icon">!</div>
+        <h2 class="error-title">Αδυναμία φόρτωσης</h2>
+        <p class="error-message"></p>
+    </div>
+
+    <script src="js/widget.js?v=5"></script>
+
+    <!-- ====================================================
+         CATEGORY MAP
+         Each entry maps a `cat` URL param to its RSS feed.
+         Add or rename categories here only.
+         ==================================================== -->
+    <script>
+    const CATEGORIES = {
+        national:      'https://kteo-news.dronepros.gr/national.xml',
+        international: 'https://kteo-news.dronepros.gr/international.xml',
+        economy:       'https://kteo-news.dronepros.gr/economy.xml',
+        lifestyle:     'https://kteo-news.dronepros.gr/lifestyle.xml',
+        auto:          'https://kteo-news.dronepros.gr/auto.xml',
+        sports:        'https://kteo-news.dronepros.gr/sports.xml'
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const params = new URLSearchParams(window.location.search);
+
+        // Pick category from URL ?cat=NAME, fallback to 'national'
+        const cat = params.get('cat');
+        const rssURL = CATEGORIES[cat] || CATEGORIES.national;
+
+        // Pick position from URL ?pos=N (1-indexed). Default 1.
+        const pos = parseInt(params.get('pos'), 10) || 1;
+
+        init_widget({
+            rssURL:           rssURL,
+            defaultImage:     'assets/default-news.svg',
+
+            layout:           'horizontal',  // horizontal | fullbleed | vertical
+            theme:            'dark',        // dark | light
+            accent_color:     '#ff5722',
+            font_size:        100,
+
+            // Single-item mode: show only the item at this position
+            position:         pos,
+
+            // Aggregator runs once daily (Mon-Sat 09:00).
+            // Polling once per hour is more than enough.
+            refresh_rate:     60,
+
+            show_date:        false,
+            show_description: true,
+            date_locale:      'el-GR'
+        });
+
+        // Kick off start_widget ourselves to start refresh timer
+        setTimeout(start_widget, 1500);
+    });
+    </script>
+
+</body>
+</html>

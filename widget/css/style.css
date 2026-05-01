@@ -1,0 +1,340 @@
+/* =============================================================
+   Custom News RSS Widget — Yodeck
+   Themes: theme-light / theme-dark
+   Layouts: layout-horizontal / layout-fullbleed / layout-vertical
+   ============================================================= */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Helvetica Neue', 'Segoe UI', Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- THEME VARIABLES ---------- */
+
+body.theme-dark {
+    --bg:           #0d1117;
+    --bg-elevated:  #161b22;
+    --text:         #f0f6fc;
+    --text-muted:   #8b949e;
+    --accent:       #ff5722;     /* default; overridden by JS from schema */
+    --shadow:       rgba(0,0,0,0.6);
+    --overlay:      linear-gradient(to top,
+                        rgba(0,0,0,0.95) 0%,
+                        rgba(0,0,0,0.75) 35%,
+                        rgba(0,0,0,0.30) 65%,
+                        rgba(0,0,0,0)   100%);
+}
+
+body.theme-light {
+    --bg:           #ffffff;
+    --bg-elevated:  #f6f8fa;
+    --text:         #1f2328;
+    --text-muted:   #656d76;
+    --accent:       #cf3a1d;
+    --shadow:       rgba(0,0,0,0.15);
+    --overlay:      linear-gradient(to top,
+                        rgba(255,255,255,0.97) 0%,
+                        rgba(255,255,255,0.85) 35%,
+                        rgba(255,255,255,0.40) 65%,
+                        rgba(255,255,255,0)    100%);
+}
+
+body {
+    background: transparent;
+    color: var(--text);
+}
+
+/* ---------- STAGE ---------- */
+
+.stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 700ms ease-in-out;
+    pointer-events: none;
+}
+
+.slide.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ---------- COMMON SLIDE ELEMENTS ---------- */
+
+.slide-image {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: transparent;
+}
+
+.slide-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: transparent;
+    overflow: hidden;
+}
+
+.slide-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    color: var(--accent);
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.8em;
+}
+
+.slide-meta .dot {
+    display: inline-block;
+    width: 0.35em;
+    height: 0.35em;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.slide-title {
+    font-size: 1em;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.7em;
+    color: var(--text);
+}
+
+.slide-description {
+    font-size: 0.6em;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+/* progress bar at bottom of every slide */
+.slide-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--accent);
+    width: 0;
+}
+.slide.active .slide-progress {
+    animation: progressBar var(--slide-duration, 10s) linear forwards;
+}
+
+@keyframes progressBar {
+    from { width: 0; }
+    to   { width: 100%; }
+}
+
+/* ============================================================
+   LAYOUT 1: HORIZONTAL  (image left 60%, text right 40%)
+   ============================================================ */
+
+.layout-horizontal .slide {
+    display: grid;
+    grid-template-columns: 60% 40%;
+    font-size: clamp(24px, 3.6vw, 64px);
+}
+
+.layout-horizontal .slide-image {
+    width: 100%;
+    height: 100%;
+}
+
+.layout-horizontal .slide-content {
+    padding: 5% 5% 5% 4%;
+}
+
+/* ============================================================
+   LAYOUT 2: FULL-BLEED (cinematic, image fills, text overlay)
+   ============================================================ */
+
+.layout-fullbleed .slide {
+    font-size: clamp(24px, 3.4vw, 68px);
+}
+
+.layout-fullbleed .slide-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.layout-fullbleed .slide-image::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--overlay);
+}
+
+.layout-fullbleed .slide-content {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 4% 5% 5% 5%;
+    background: transparent;
+    /* boost contrast for text over imagery */
+    text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.layout-fullbleed.theme-dark .slide-description,
+.layout-fullbleed.theme-dark .slide-title {
+    color: #ffffff;
+}
+
+.layout-fullbleed.theme-dark .slide-description {
+    color: rgba(255,255,255,0.85);
+}
+
+.layout-fullbleed.theme-light .slide-description,
+.layout-fullbleed.theme-light .slide-title {
+    color: #0d1117;
+}
+
+.layout-fullbleed.theme-light .slide-description {
+    color: rgba(13,17,23,0.75);
+}
+
+/* ============================================================
+   LAYOUT 3: VERTICAL  (image top 50%, text bottom 50%)
+   In portrait orientation we scale type from viewport HEIGHT
+   instead of width, and anchor the text block to the top of
+   the lower panel so we don't leave a big empty band.
+   ============================================================ */
+
+.layout-vertical .slide {
+    display: grid;
+    grid-template-rows: 50% 50%;
+    font-size: clamp(28px, 3.8vh, 60px);
+}
+
+.layout-vertical .slide-image {
+    width: 100%;
+    height: 100%;
+}
+
+.layout-vertical .slide-content {
+    padding: 5% 5% 5% 5%;
+    justify-content: flex-start;
+    overflow: hidden;
+}
+
+.layout-vertical .slide-meta {
+    margin-bottom: 0.8em;
+    font-size: 0.6em;
+}
+
+.layout-vertical .slide-title {
+    margin-bottom: 0.7em;
+}
+
+.layout-vertical .slide-description {
+    font-size: 0.6em;
+}
+
+/* ============================================================
+   LOADER OVERLAY
+   ============================================================ */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    background: transparent;
+    z-index: 100;
+    transition: opacity 400ms ease;
+}
+
+.overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loader {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--bg-elevated);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.status-text {
+    color: var(--text-muted);
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   ERROR SCREEN
+   ============================================================ */
+
+.error-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    background: transparent;
+    z-index: 200;
+    padding: 2rem;
+    text-align: center;
+}
+
+.error-screen[hidden] {
+    display: none;
+}
+
+.error-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.error-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.error-message {
+    font-size: 1rem;
+    color: var(--text-muted);
+    max-width: 600px;
+    line-height: 1.5;
+}

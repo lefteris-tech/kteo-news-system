@@ -1,0 +1,6 @@
+# Relaxed version constraints - λειτουργεί με stale corporate mirrors
+# (το αρχικό requirements.txt απαιτούσε νεότερες versions)
+feedparser>=6.0
+requests>=2.20
+beautifulsoup4>=4.9
+anthropic>=0.18

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Custom News RSS Widget</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="theme-dark layout-horizontal">
+
+    <!-- Stage where slides are injected -->
+    <div id="stage" class="stage" aria-live="polite"></div>
+
+    <!-- Loader / status overlay -->
+    <div id="overlay" class="overlay">
+        <div class="loader"></div>
+        <p class="status-text">Φόρτωση ειδήσεων…</p>
+    </div>
+
+    <!-- Error screen (hidden by default) -->
+    <div id="error-screen" class="error-screen" hidden>
+        <div class="error-icon">!</div>
+        <h2 class="error-title">Αδυναμία φόρτωσης</h2>
+        <p class="error-message"></p>
+    </div>
+
+    <script src="js/widget.js"></script>
+</body>
+</html>
