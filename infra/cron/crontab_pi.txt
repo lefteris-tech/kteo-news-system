@@ -1,0 +1,3 @@
+# KTEO Curation Platform — Sprint 1
+# fetch_raw runs Mon-Fri 07:50, populates pending_curation in news_cache.db
+50 7 * * 1-5 /opt/news_aggregator/fetch_raw_cron.sh >> /var/log/news_aggregator.log 2>&1

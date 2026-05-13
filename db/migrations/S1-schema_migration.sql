@@ -1,11 +1,15 @@
-CREATE TABLE seen_articles (
-            link TEXT PRIMARY KEY,
-            title TEXT,
-            category TEXT,
-            published_iso TEXT,
-            seen_at_iso TEXT
-        );
-CREATE TABLE sources (
+-- =============================================================
+-- S1-schema_migration.sql
+-- KTEO Curation Platform — Sprint 1
+-- Sprint: 1, version: 1, generated: 2026-05-13
+-- =============================================================
+-- Adds 5 new tables to /opt/news_aggregator/news_cache.db.
+-- Existing 'seen_articles' table is NOT touched.
+-- All statements use IF NOT EXISTS -> safe to re-run.
+-- =============================================================
+
+-- ---------- sources ----------
+CREATE TABLE IF NOT EXISTS sources (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL,
     url             TEXT    NOT NULL UNIQUE,
@@ -14,8 +18,9 @@ CREATE TABLE sources (
     category_hint   TEXT,                                -- optional pre-bias
     created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE sqlite_sequence(name,seq);
-CREATE TABLE filters (
+
+-- ---------- filters ----------
+CREATE TABLE IF NOT EXISTS filters (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     scope           TEXT    NOT NULL,                    -- global | category
     category        TEXT,                                -- NULL when scope=global
@@ -24,7 +29,9 @@ CREATE TABLE filters (
     enabled         INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE pending_curation (
+
+-- ---------- pending_curation ----------
+CREATE TABLE IF NOT EXISTS pending_curation (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     fetch_date          TEXT    NOT NULL,                -- yyyy-mm-dd
     source_id           INTEGER,                         -- NULL for manual injections
@@ -47,18 +54,24 @@ CREATE TABLE pending_curation (
     FOREIGN KEY (source_id) REFERENCES sources(id),
     UNIQUE (fetch_date, guid)
 );
-CREATE INDEX idx_pending_date_cat_status
+
+CREATE INDEX IF NOT EXISTS idx_pending_date_cat_status
     ON pending_curation(fetch_date, classified_category, status);
-CREATE INDEX idx_pending_status
+
+CREATE INDEX IF NOT EXISTS idx_pending_status
     ON pending_curation(status);
-CREATE TABLE users (
+
+-- ---------- users ----------
+CREATE TABLE IF NOT EXISTS users (
     email           TEXT PRIMARY KEY,                    -- from Cf-Access-Authenticated-User-Email
     role            TEXT NOT NULL DEFAULT 'curator',     -- admin | curator
     enabled         INTEGER NOT NULL DEFAULT 1,
     first_seen      TEXT NOT NULL DEFAULT (datetime('now')),
     last_login      TEXT
 );
-CREATE TABLE publish_log (
+
+-- ---------- publish_log ----------
+CREATE TABLE IF NOT EXISTS publish_log (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     publish_date            TEXT NOT NULL,               -- yyyy-mm-dd
     triggered_by            TEXT NOT NULL,               -- user email
@@ -66,5 +79,10 @@ CREATE TABLE publish_log (
     total_items             INTEGER,
     created_at              TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_publog_date
+
+CREATE INDEX IF NOT EXISTS idx_publog_date
     ON publish_log(publish_date);
+
+-- =============================================================
+-- End of S1 schema migration
+-- =============================================================
