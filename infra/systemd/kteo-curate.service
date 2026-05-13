@@ -1,0 +1,32 @@
+[Unit]
+Description=Autovision News Curator (Streamlit) — Sprint 3
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/news_aggregator
+EnvironmentFile=/etc/news_aggregator.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/opt/news_aggregator/venv/bin/streamlit run /opt/news_aggregator/streamlit_app.py \
+    --server.port 8501 \
+    --server.address 127.0.0.1 \
+    --server.headless true \
+    --server.enableCORS false \
+    --server.enableXsrfProtection true \
+    --browser.gatherUsageStats false \
+    --theme.base dark
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kteo-curate
+
+# Resource limits
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
