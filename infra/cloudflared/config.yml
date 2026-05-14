@@ -1,7 +1,9 @@
 tunnel: 369a2e45-101a-4bb5-9c69-1bd74bd4a410
-credentials-file: /home/pi/.cloudflared/369a2e45-101a-4bb5-9c69-1bd74bd4a410.json
+credentials-file: /etc/cloudflared/369a2e45-101a-4bb5-9c69-1bd74bd4a410.json
 
 ingress:
   - hostname: kteo-news.dronepros.gr
+    service: http://localhost:80
+  - hostname: curate.dronepros.gr
     service: http://localhost:80
   - service: http_status:404
