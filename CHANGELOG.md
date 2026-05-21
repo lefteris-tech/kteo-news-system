@@ -8,6 +8,23 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — Sprint 5.0: Adaptive pre-filtering schema preparation
+
+### Added
+- `db/migrations/S5_0-prefiltering_schema.sql` — adds `auto_filter_rule_id` to `pending_curation` (FK → `filters.id`) and a partial index for analytics queries
+- `db/migrations/S5_0-validate.py` — standalone validator for the migration
+- `docs/sprints/S5_0-deploy.md` — runbook with backup, apply, validate, rollback steps
+- `'auto_filtered'` is now a recognized value of `pending_curation.status` (convention; no DDL)
+
+### Changed
+- `db/schema.sql` — consolidated to reflect the post-S5.0 state, with section comments per sprint origin
+
+### Notes
+- Pure groundwork sprint. No application-code behaviour change in this release — the new column will remain `NULL` until Sprint 5.3 wires up the runtime filter.
+- Migration deployed manually on the Pi per the deploy runbook; no service restart required.
+
+---
+
 ## [0.7.0] — 2026-05-14 — Sprint 4: Edge deployment
 
 ### Added
