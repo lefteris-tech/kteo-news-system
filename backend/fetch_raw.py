@@ -1,38 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fetch_raw.py — KTEO Curation Platform, Sprint 3.2
-====================================================
-Sprint: 3.2, version: 3
-Generated: 2026-05-14
+fetch_raw.py — KTEO Curation Platform, Sprint 6
+=================================================
+Sprint: 6, version: 1
+Generated: 2026-05-21
 
-CHANGES FROM SPRINT 3.1:
-- Sources are now read from the `sources` DB table (managed via Streamlit
-  Πηγές page) instead of the hardcoded RSS_SOURCE constant.
-- Each pending_curation row records its source_id (was always NULL before).
-- Multiple sources are fetched and interleaved round-robin so MAX_CANDIDATES
-  budget is shared fairly across sources.
-- Fail-fast: if no enabled source exists, fetch_raw exits with code 3 and
-  a clear error message. No silent failure, no fallback.
+ARCHITECTURE CHANGE FROM SPRINT 3.2:
+Classification at fetch time is REMOVED. The classifier (Claude Haiku) is
+no longer invoked here. Articles are pulled from RSS, deduplicated, and
+inserted into pending_curation with classified_category=NULL.
 
-CHANGES FROM SPRINT 3.1 KEPT:
-- Classify-only (no safety filter, no summary at fetch).
-- haiku_summary stored NULL until publish-time summarization.
+The human curator assigns the category during the curation step (see
+pages/curation.py). The classifier is only invoked at publish time, and
+only for items the human has both selected AND categorised.
+
+Rationale: removes a fragile API dependency from fetch time. The Anthropic
+API cap that triggered an incident on 2026-05-21 (40/40 fetch failures)
+becomes operationally irrelevant — the curator queue keeps populating
+even if the API is down. Cost also drops to "publish-only" usage.
 
 Pipeline:
   [1] schedule check (skip Σαβ/Κυρ + αργίες)
   [2] schema sanity
   [3] load active sources from DB (fail-fast if empty)
-  [4] fetch RSS from each source
-  [5] pre-filter + interleave + cap MAX_CANDIDATES
-  [6] classify_only via Claude Haiku
-  [7] insert into pending_curation with source_id
-  [8] expire prior days' pendings
+  [4] fetch RSS from each source (round-robin interleave)
+  [5] pre-filter + cap MAX_CANDIDATES
+  [6] insert into pending_curation with classified_category=NULL
 
 Exit codes:
   0 = success
   1 = skipped (weekend/holiday)
-  2 = API key missing
   3 = no enabled sources in DB
   >3 = error
 """
@@ -40,24 +38,16 @@ Exit codes:
 import argparse
 import logging
 import os
-import re
 import sqlite3
 import sys
-import time
 from datetime import datetime, timezone
-
-from anthropic import Anthropic
 
 # Re-use Phase 1 helpers
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from news_aggregator import (  # type: ignore
     Article,
-    CATEGORIES,
     GREEK_HOLIDAYS_FIXED,
-    RATE_LIMIT_SECONDS,
-    SLUG_MAP,
     already_seen,
-    cleanup_old_entries,
     fetch_article_content,
     fetch_rss,
     init_db,
@@ -69,9 +59,6 @@ from news_aggregator import (  # type: ignore
 log = logging.getLogger("fetch_raw")
 
 MAX_CANDIDATES = 40
-HAIKU_MODEL = os.environ.get("KTEO_HAIKU_MODEL", "claude-haiku-4-5-20251001")
-
-ALLOWED_SLUGS = {"national", "international", "economy", "lifestyle", "auto", "sports"}
 
 
 # -----------------------------------------------------------------------------
@@ -79,7 +66,6 @@ ALLOWED_SLUGS = {"national", "international", "economy", "lifestyle", "auto", "s
 # -----------------------------------------------------------------------------
 
 def is_weekend_or_holiday(d: datetime) -> tuple[bool, str]:
-    """Σαββατοκύριακα + ελληνικές αργίες (skip και Σάββατο)."""
     if d.weekday() >= 5:
         return True, "Σαββατοκύριακο"
     for month, day in GREEK_HOLIDAYS_FIXED:
@@ -105,7 +91,6 @@ def ensure_pending_curation_schema(conn: sqlite3.Connection) -> None:
 
 
 def load_active_sources(conn: sqlite3.Connection) -> list[dict]:
-    """Read enabled sources from DB. Returns list of dicts."""
     conn.row_factory = sqlite3.Row
     rows = conn.execute("""
         SELECT id, name, url, type, category_hint
@@ -117,69 +102,7 @@ def load_active_sources(conn: sqlite3.Connection) -> list[dict]:
 
 
 # -----------------------------------------------------------------------------
-# Classify-only (Sprint 3.1, unchanged in 3.2)
-# -----------------------------------------------------------------------------
-
-CLASSIFY_PROMPT = """Είσαι ταξινομητής ειδήσεων. Διάβασε τίτλο και σώμα άρθρου και επέστρεψε ΜΟΝΟ JSON με την κατηγορία.
-
-Κατηγορίες (επίλεξε ΜΙΑ):
-- national      → εθνικές ειδήσεις (Ελλάδα, ελληνική κοινωνία, ελληνική πολιτική, ΕΛ.ΑΣ., δικαιοσύνη, ασφάλεια Ελλάδας)
-- international → διεθνείς ειδήσεις (χώρες εκτός Ελλάδας, εξωτερική πολιτική, παγκόσμια γεγονότα)
-- economy       → οικονομία, αγορές, επιχειρήσεις, χρηματιστήριο, banking, GDP, πρόστιμα
-- lifestyle     → ταξίδια, μόδα, φαγητό, τέχνη, ψυχαγωγία, μουσική, εκδηλώσεις, μουσεία, διασκέδαση
-- auto          → αυτοκίνητα, μηχανές, EVs, ράλι, μεταφορές
-- sports        → αθλητικά (ποδόσφαιρο, μπάσκετ, αγώνες, παίκτες, αποτελέσματα)
-
-ΣΗΜΑΝΤΙΚΟ:
-- Δεν φιλτράρεις περιεχόμενο. ΟΛΑ τα άρθρα ταξινομούνται.
-- Επιστρέφεις ΜΟΝΟ JSON: {"category": "..."} — καμία λέξη πριν ή μετά.
-
-Τίτλος: %s
-
-Σώμα:
-%s
-"""
-
-
-def classify_only(client: Anthropic, title: str, body: str) -> dict | None:
-    body_trim = (body or "")[:1500]
-    prompt = CLASSIFY_PROMPT % (title, body_trim)
-    try:
-        msg = client.messages.create(
-            model=HAIKU_MODEL,
-            max_tokens=80,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception as e:
-        log.error("Claude API error: %s", e)
-        return None
-
-    text = ""
-    for block in msg.content:
-        if hasattr(block, "text"):
-            text += block.text
-    text = text.strip()
-
-    m = re.search(r'\{[^{}]*"category"\s*:\s*"([^"]+)"[^{}]*\}', text)
-    if not m:
-        log.debug("  → no JSON in Claude response: %r", text[:100])
-        return None
-
-    category = m.group(1).strip().lower()
-    if category not in ALLOWED_SLUGS:
-        log.debug("  → unknown category: %r", category)
-        return None
-
-    return {"category": category, "confidence": 1.0}
-
-
-def mock_classify_only(art: Article, idx: int) -> dict:
-    slugs = ["national", "international", "economy", "lifestyle", "auto", "sports"]
-    return {"category": slugs[idx % len(slugs)], "confidence": 1.0}
-
-
-# -----------------------------------------------------------------------------
-# Insert (Sprint 3.2: source_id is now a parameter)
+# Insert — Sprint 6: classified_category=NULL, haiku_confidence=NULL
 # -----------------------------------------------------------------------------
 
 def insert_pending_minimal(
@@ -187,8 +110,6 @@ def insert_pending_minimal(
     *,
     fetch_date: str,
     art: Article,
-    classified_slug: str,
-    confidence: float,
     source_id: int | None = None,
 ) -> bool:
     try:
@@ -199,7 +120,8 @@ def insert_pending_minimal(
                 image_url, pub_date, classified_category,
                 safety_passed, haiku_confidence, haiku_summary,
                 status, source_type, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NULL, 'pending', 'auto', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL,
+                      'pending', 'auto', ?)
             """,
             (
                 fetch_date,
@@ -210,8 +132,6 @@ def insert_pending_minimal(
                 art.body_text or "",
                 art.image_url or "",
                 art.published.isoformat() if art.published else datetime.now(timezone.utc).isoformat(),
-                classified_slug,
-                confidence,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -244,7 +164,6 @@ def expire_old_pendings(conn: sqlite3.Connection, today: str) -> int:
 # -----------------------------------------------------------------------------
 
 def fetch_all_sources(sources: list[dict]) -> list[Article]:
-    """Fetch each source's RSS, tag articles with _source_id, return interleaved list."""
     per_source: list[list[Article]] = []
     for src in sources:
         log.info("Fetching %s (%s)", src["name"], src["url"])
@@ -259,7 +178,6 @@ def fetch_all_sources(sources: list[dict]) -> list[Article]:
             log.error("  → failed to fetch %s: %s", src["url"], e)
             continue
 
-    # Round-robin interleave so each source shares the MAX_CANDIDATES budget fairly
     interleaved: list[Article] = []
     if not per_source:
         return interleaved
@@ -276,10 +194,8 @@ def fetch_all_sources(sources: list[dict]) -> list[Article]:
 # -----------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="KTEO fetch_raw (Sprint 3.2)")
+    parser = argparse.ArgumentParser(description="KTEO fetch_raw (Sprint 6)")
     parser.add_argument("--db", default="/opt/news_aggregator/news_cache.db")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Mock classify (no API calls), still inserts to DB")
     parser.add_argument("--ignore-holiday", action="store_true",
                         help="Run even on weekend/holiday")
     parser.add_argument("--limit-feed", type=int, default=None,
@@ -317,17 +233,7 @@ def main() -> int:
     for s in sources:
         log.info("  [%d] %s — %s", s["id"], s["name"], s["url"])
 
-    # [4] Anthropic client
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    claude_client = None
-    if not args.dry_run:
-        if not api_key:
-            log.error("ANTHROPIC_API_KEY not set; aborting (use --dry-run for test)")
-            db.close()
-            return 2
-        claude_client = Anthropic(api_key=api_key)
-
-    # [5] Fetch all sources, interleave round-robin
+    # [4] Fetch all sources, interleave round-robin
     raw_articles = fetch_all_sources(sources)
     log.info("Total raw articles (interleaved): %d", len(raw_articles))
 
@@ -335,7 +241,7 @@ def main() -> int:
         raw_articles = raw_articles[: args.limit_feed * len(sources)]
         log.info("Limited to %d (--limit-feed × sources)", len(raw_articles))
 
-    # [6] Pre-filter
+    # [5] Pre-filter
     candidates = []
     for art in raw_articles:
         if already_seen(db, art.link):
@@ -348,9 +254,9 @@ def main() -> int:
     log.info("Pre-filter: %d / %d candidates", len(candidates), len(raw_articles))
     candidates = candidates[:MAX_CANDIDATES]
 
-    # [7] Fetch + classify + insert
+    # [6] Fetch content + insert (NO classification)
     inserted = 0
-    failed_classification = 0
+    skipped_no_content = 0
     per_source_inserts: dict[int, int] = {}
     for idx, art in enumerate(candidates, 1):
         src_id = getattr(art, "_source_id", None)
@@ -363,46 +269,30 @@ def main() -> int:
         if not body_text or not image_url:
             log.debug("  → skip (missing image or body)")
             mark_seen(db, art)
+            skipped_no_content += 1
             continue
-
-        if args.dry_run:
-            result = mock_classify_only(art, idx)
-        else:
-            result = classify_only(claude_client, art.title, body_text)
-            time.sleep(RATE_LIMIT_SECONDS)
-
-        if not result:
-            log.debug("  → classification failed")
-            mark_seen(db, art)
-            failed_classification += 1
-            continue
-
-        slug = result["category"]
-        art.classified_category = slug
 
         if insert_pending_minimal(
             db,
             fetch_date=today,
             art=art,
-            classified_slug=slug,
-            confidence=result["confidence"],
             source_id=src_id,
         ):
             inserted += 1
             per_source_inserts[src_id] = per_source_inserts.get(src_id, 0) + 1
         mark_seen(db, art)
 
-    # [8] Expire prior days
+    # [7] Expire prior days
     expired = expire_old_pendings(db, today)
 
-    # [9] Summary
+    # [8] Summary
     log.info("=" * 60)
-    log.info("fetch_raw run complete (Sprint 3.2)")
+    log.info("fetch_raw run complete (Sprint 6 — no classification at fetch)")
     log.info("  fetch_date            : %s", today)
     log.info("  sources active        : %d", len(sources))
     log.info("  candidates            : %d", len(candidates))
     log.info("  inserted (pending)    : %d", inserted)
-    log.info("  classification failed : %d", failed_classification)
+    log.info("  skipped (no content)  : %d", skipped_no_content)
     log.info("  expired (prior days)  : %d", expired)
     log.info("-" * 60)
     log.info("Inserts per source:")
@@ -410,15 +300,13 @@ def main() -> int:
         cnt = per_source_inserts.get(s["id"], 0)
         log.info("  [%d] %-25s : %d", s["id"], s["name"], cnt)
     log.info("-" * 60)
-    log.info("Today's pending by category:")
-    for slug in ["national", "international", "economy",
-                 "lifestyle", "auto", "sports"]:
-        cnt = db.execute(
-            "SELECT COUNT(*) FROM pending_curation "
-            "WHERE fetch_date=? AND classified_category=? AND status='pending'",
-            (today, slug),
-        ).fetchone()[0]
-        log.info("  %-14s : %d", slug, cnt)
+    total_pending = db.execute(
+        "SELECT COUNT(*) FROM pending_curation "
+        "WHERE fetch_date=? AND status='pending'",
+        (today,),
+    ).fetchone()[0]
+    log.info("Today's pending (uncategorised): %d", total_pending)
+    log.info("Categorisation happens at curation time via Streamlit.")
     log.info("=" * 60)
 
     db.close()

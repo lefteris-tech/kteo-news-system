@@ -171,6 +171,29 @@ def set_selection(item_id: int, selected: bool, by_email: str):
     conn.commit()
 
 
+def set_category(item_id: int, slug: Optional[str]) -> None:
+    """Sprint 6: assign or clear the curator-chosen category on a pending item.
+    Passing slug=None clears the category AND demotes status back to 'pending'
+    (a selected-but-uncategorised state would fail publish validation)."""
+    conn = get_db()
+    if slug:
+        conn.execute(
+            "UPDATE pending_curation SET classified_category=? "
+            "WHERE id=? AND status IN ('pending','selected')",
+            (slug, item_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE pending_curation "
+            "   SET classified_category=NULL, "
+            "       status=CASE WHEN status='selected' THEN 'pending' ELSE status END, "
+            "       selected_by=NULL, selected_at=NULL "
+            " WHERE id=?",
+            (item_id,),
+        )
+    conn.commit()
+
+
 def update_summary(item_id: int, new_summary: str):
     conn = get_db()
     conn.execute("UPDATE pending_curation SET haiku_summary=? WHERE id=?",
