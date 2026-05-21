@@ -38,7 +38,7 @@ sudo apt install -y \
 ```bash
 sudo mkdir -p /opt/news_aggregator
 sudo chown pi:pi /opt/news_aggregator
-git clone git@github.com:Lefterisst/kteo-news-system.git /tmp/kteo-news-system
+git clone git@github.com:lefteris-tech/kteo-news-system.git /tmp/kteo-news-system
 
 # Backend code
 cp /tmp/kteo-news-system/backend/*.py /opt/news_aggregator/
