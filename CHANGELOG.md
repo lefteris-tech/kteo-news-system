@@ -8,7 +8,25 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Sprint 5.0: Adaptive pre-filtering schema preparation
+## [Unreleased] — Sprint 6: Human-controlled classification
+
+### Changed
+- **`backend/fetch_raw.py`** — removed the Claude Haiku classification step entirely. Articles are pulled from RSS, deduplicated, and inserted into `pending_curation` with `classified_category=NULL`. The classifier is no longer invoked at fetch time.
+- **`backend/publish_curated.py`** — added pre-publish validation that refuses to write XML if any selected row has `classified_category=NULL` (exit code 4). Summarisation is now **fail-fast**: the first Haiku failure aborts the entire run (exit code 3), no fallback to truncated body text. Items already summarised in the failing run are persisted and skipped on retry.
+- **`backend/pages/curation.py`** — major UI redesign. Removed the 6 category tabs. Single unified queue with per-row category dropdown ("— Διάλεξε Κατηγορία —" placeholder). The Επιλογή checkbox is disabled until a category is chosen. Clearing the category on a selected row auto-deselects.
+- **`backend/kteo_curate.py`** — added `set_category()` helper.
+
+### Operational impact
+- Anthropic API outages no longer affect the curator queue — `fetch_raw` makes zero API calls.
+- Per-day API spend drops from `(fetch + publish)` to `publish only` (~5–15 calls/day vs. ~40–55).
+- Curator picks the category explicitly — no classifier errors reach production.
+
+### Suspended (not removed)
+- Sprint 5.1–5.4 (adaptive pre-filtering) is suspended. The schema column `pending_curation.auto_filter_rule_id` introduced in Sprint 5.0 remains in place, unused, as future-proofing.
+
+---
+
+## [0.8.0] — 2026-05-21 — Sprint 5.0: Adaptive pre-filtering schema preparation
 
 ### Added
 - `db/migrations/S5_0-prefiltering_schema.sql` — adds `auto_filter_rule_id` to `pending_curation` (FK → `filters.id`) and a partial index for analytics queries
