@@ -240,12 +240,25 @@
 
             const image = findImage(node, rawDesc) || channelImage || state.config.defaultImage;
 
+            // S5.1 — source attribution (custom namespace from publish_curated.py).
+            // Use getElementsByTagNameNS for robust matching regardless of prefix.
+            function getNSText(localName) {
+                const els = getNSElements(node, localName);
+                if (els && els.length) return stripHTML(els[0].textContent.trim());
+                // Fallback: prefix as plain string (works in some XML parsers)
+                return stripHTML(getXMLText(node, 'kteo:' + localName));
+            }
+            const sourceName = getNSText('source_name');
+            const sourceLogo = getNSText('source_logo');
+
             out.push({
                 title:       title || '(Χωρίς τίτλο)',
                 description: description,
                 pubDate:     (pubDate && !isNaN(pubDate)) ? pubDate : null,
                 image:       image,
-                link:        link
+                link:        link,
+                sourceName:  sourceName,
+                sourceLogo:  sourceLogo
             });
         });
 
@@ -341,13 +354,40 @@
             const content = document.createElement('div');
             content.className = 'slide-content';
 
-            // meta line (date)
-            if (state.config.show_date && item.pubDate) {
+            // meta line — S5.1: avatar (when source data present) + optional timestamp.
+            // Renders independently of show_date so the source pill is visible
+            // even on the carry-over case where show_date is false.
+            const showAvatar    = !!(item.sourceName || item.sourceLogo);
+            const showTimestamp = state.config.show_date && item.pubDate;
+            if (showAvatar || showTimestamp) {
                 const meta = document.createElement('div');
                 meta.className = 'slide-meta';
-                meta.innerHTML =
-                    '<span class="dot"></span>' +
-                    '<span>' + escapeHTML(formatDate(item.pubDate)) + '</span>';
+
+                if (showAvatar) {
+                    const av = document.createElement('span');
+                    av.className = 'source-avatar';
+                    const label = item.sourceName || 'πηγή';
+                    av.setAttribute('aria-label', label);
+                    av.setAttribute('title', label);
+                    if (item.sourceLogo) {
+                        // Per-day cache-bust so updated logos propagate within 24h.
+                        const today = new Date().toISOString().slice(0, 10);
+                        av.style.backgroundImage =
+                            'url("' + escapeUrl(item.sourceLogo) + '?d=' + today + '")';
+                    } else {
+                        av.classList.add('no-logo');
+                        av.setAttribute('data-letter',
+                            (item.sourceName || '?').charAt(0));
+                    }
+                    meta.appendChild(av);
+                }
+
+                if (showTimestamp) {
+                    const ts = document.createElement('span');
+                    ts.textContent = formatDate(item.pubDate);
+                    meta.appendChild(ts);
+                }
+
                 content.appendChild(meta);
             }
 

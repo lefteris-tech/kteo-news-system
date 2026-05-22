@@ -8,7 +8,35 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Sprint 5.0: Adaptive pre-filtering schema preparation
+## [Unreleased] — Sprint 5.1: Source avatar pill in news widget
+
+### Added
+- `backend/source_logo.py` — multi-strategy logo fetcher (Clearbit → HTML parse → Google favicon) with Pillow-based 128×128 RGBA PNG normalization
+- `backend/backfill_logos.py` — one-off backfill for sources registered before S5.1
+- `db/migrations/S5_1-source_logo.sql` — adds `sources.logo_path TEXT` (NULL-able)
+- `db/migrations/S5_1-validate.py` — schema validator for the migration
+- `docs/sprints/S5_1-deploy.md` — 12-step runbook with rollback per component
+- `<kteo:source_name>` and `<kteo:source_logo>` custom-namespace elements in the per-category RSS XML (`xmlns:kteo="https://kteo-news.dronepros.gr/ns/1.0"` declared on `<rss>`)
+
+### Changed
+- `backend/pages/sources.py` — full rewrite: avatar column in the list, "Auto-fetch" + upload + clear + re-fetch buttons on the form and per row
+- `backend/publish_curated.py` — `fetch_selected_rows` now LEFT-JOINs `sources`; `row_to_article` populates `Article.source_name` and `Article.source_logo_url`
+- `backend/news_aggregator.py` — `Article` gains `source_name` and `source_logo_url`; `build_rss_xml` emits the new namespace + per-item source elements (only when populated)
+- `backend/kteo_curate.py` — `add_source()` accepts `logo_path=None`
+- `widget/css/style.css` — `.slide-meta .dot` retained for backward compat; new `.source-avatar` (circle), `.source-avatar.no-logo` (colored-letter fallback)
+- `widget/js/widget.js` — parses `kteo:source_*` from each item (namespace-agnostic via `getElementsByTagNameNS`), renders a circular avatar; rendering decoupled from `show_date` so the source pill shows even when timestamps are hidden
+- `widget/news.html` — cache-buster bumped `widget.js?v=5` → `widget.js?v=6`
+- `db/schema.sql` — consolidated to reflect the post-S5.1 state
+
+### Notes
+- Avatar-only design: source name is in `aria-label`/`title` (accessibility + hover tooltip), not rendered as visible text
+- Items without a registered source (manual injections, or items pre-dating their source registration) degrade cleanly — the kteo elements are omitted and the widget renders no avatar
+- No Anthropic API calls anywhere in this change; the active spend-cap incident does not block the deploy
+- Logo file naming uses a stable slug derived from the source URL (`newsbeast.gr/feed` → `newsbeast.png`), served as static assets under `/var/www/html/news/logos/`
+
+---
+
+## [0.8.0] — 2026-05-21 — Sprint 5.0: Adaptive pre-filtering schema preparation
 
 ### Added
 - `db/migrations/S5_0-prefiltering_schema.sql` — adds `auto_filter_rule_id` to `pending_curation` (FK → `filters.id`) and a partial index for analytics queries

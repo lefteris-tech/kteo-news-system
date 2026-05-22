@@ -228,12 +228,13 @@ def get_sources() -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM sources ORDER BY id").fetchall()]
 
 
-def add_source(name, url, source_type="rss", category_hint=None, enabled=True) -> int:
+def add_source(name, url, source_type="rss", category_hint=None, enabled=True,
+               logo_path=None) -> int:
     conn = get_db()
     cur = conn.execute("""
-        INSERT INTO sources (name, url, type, category_hint, enabled)
-        VALUES (?, ?, ?, ?, ?)
-    """, (name, url, source_type, category_hint, 1 if enabled else 0))
+        INSERT INTO sources (name, url, type, category_hint, enabled, logo_path)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (name, url, source_type, category_hint, 1 if enabled else 0, logo_path))
     conn.commit()
     return cur.lastrowid
 
