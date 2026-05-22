@@ -280,9 +280,6 @@ class Article:
     safe: bool = False
     skip_reason: Optional[str] = None
     confidence: float = 0.0
-    # S5.1 — source attribution for the widget avatar pill
-    source_name: str = ""
-    source_logo_url: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -657,24 +654,6 @@ def build_rss_xml(category: str, articles: list[Article]) -> str:
                 f'type="image/jpeg" length="0"/>'
             )
 
-        # S5.1 — source attribution in custom namespace; widget reads these to
-        # draw the circular avatar pill. Emitted only when data is present so
-        # carry-over items (which may pre-date the source registry) degrade
-        # cleanly to "no avatar".
-        source_xml = ""
-        if art.source_name:
-            source_xml += (
-                f"\n      <kteo:source_name>"
-                f"{xml_escape(art.source_name)}"
-                f"</kteo:source_name>"
-            )
-        if art.source_logo_url:
-            source_xml += (
-                f"\n      <kteo:source_logo>"
-                f"{xml_escape(art.source_logo_url)}"
-                f"</kteo:source_logo>"
-            )
-
         items_xml.append(f"""    <item>
       <title>{xml_escape(title_clean)}</title>
       <link>{xml_escape(art.link)}</link>
@@ -682,13 +661,13 @@ def build_rss_xml(category: str, articles: list[Article]) -> str:
       <category>{xml_escape(category)}</category>
       <pubDate>{pub_date_str}</pubDate>
       <guid isPermaLink="true">{xml_escape(art.link)}</guid>
-      {enclosure_xml}{source_xml}
+      {enclosure_xml}
     </item>""")
 
     items_str = "\n".join(items_xml)
 
     rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:kteo="https://kteo-news.dronepros.gr/ns/1.0">
+<rss version="2.0">
   <channel>
     <title>KTEO Autovision - {xml_escape(category)}</title>
     <link>{feed_url}</link>

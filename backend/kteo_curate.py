@@ -171,6 +171,29 @@ def set_selection(item_id: int, selected: bool, by_email: str):
     conn.commit()
 
 
+def set_category(item_id: int, slug: Optional[str]) -> None:
+    """Sprint 6: assign or clear the curator-chosen category on a pending item.
+    Passing slug=None clears the category AND demotes status back to 'pending'
+    (a selected-but-uncategorised state would fail publish validation)."""
+    conn = get_db()
+    if slug:
+        conn.execute(
+            "UPDATE pending_curation SET classified_category=? "
+            "WHERE id=? AND status IN ('pending','selected')",
+            (slug, item_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE pending_curation "
+            "   SET classified_category=NULL, "
+            "       status=CASE WHEN status='selected' THEN 'pending' ELSE status END, "
+            "       selected_by=NULL, selected_at=NULL "
+            " WHERE id=?",
+            (item_id,),
+        )
+    conn.commit()
+
+
 def update_summary(item_id: int, new_summary: str):
     conn = get_db()
     conn.execute("UPDATE pending_curation SET haiku_summary=? WHERE id=?",
@@ -228,8 +251,7 @@ def get_sources() -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM sources ORDER BY id").fetchall()]
 
 
-def add_source(name, url, source_type="rss", category_hint=None, enabled=True,
-               logo_path=None) -> int:
+def add_source(name, url, source_type="rss", category_hint=None, enabled=True, logo_path=None) -> int:
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO sources (name, url, type, category_hint, enabled, logo_path)
@@ -507,7 +529,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     border: 1px solid var(--av-border);
     background: var(--av-surface);
     color: var(--av-ink);
-    font-size: 13px;
+    font-size: 14.5px;
 }
 .stButton > button:hover { border-color: var(--av-muted); color: var(--av-ink); }
 .stButton > button[kind="primary"] {
@@ -527,7 +549,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     color: var(--av-muted);
     background: transparent;
     padding: 0.75rem 1rem;
-    font-size: 13px;
+    font-size: 14.5px;
 }
 .stTabs [aria-selected="true"] {
     color: var(--av-accent);
@@ -564,7 +586,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 .av-status-strip .pulse.warning { background: var(--av-warning); }
 .av-status-strip .pulse.danger  { background: var(--av-danger); }
 @keyframes av-pulse { 0%, 100% {opacity:1;} 50% {opacity:0.4;} }
-.av-status-strip .label { color: var(--av-muted); font-size: 12px; }
+.av-status-strip .label { color: var(--av-muted); font-size: 13.5px; }
 .av-status-strip .value { color: var(--av-ink); font-weight: 600; }
 .av-status-strip .sep   { width:1px; height:1.25rem; background: var(--av-border); }
 
@@ -573,39 +595,39 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     background-color: var(--av-surface);
     border: 1px solid var(--av-border);
     border-radius: 0.5rem;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
 }
 .av-card.selected {
     box-shadow: inset 3px 0 0 0 var(--av-accent);
     background-color: var(--av-surface2);
 }
-.av-card .row { display: flex; gap: 1rem; align-items: flex-start; }
+.av-card .row { display: flex; gap: 1.25rem; align-items: flex-start; }
 .av-thumb {
-    width: 120px; height: 80px; border-radius: 0.375rem;
+    width: 180px; height: 120px; border-radius: 0.5rem;
     background: linear-gradient(135deg, #1c222b, #161b22);
     flex-shrink: 0;
     background-size: cover; background-position: center;
 }
 .av-title {
-    color: var(--av-ink); font-weight: 600; font-size: 14px;
+    color: var(--av-ink); font-weight: 600; font-size: 17px;
     line-height: 1.3; margin: 0;
 }
 .av-snippet {
-    color: var(--av-muted); font-size: 12.5px; line-height: 1.4;
-    margin: 4px 0 0 0;
+    color: var(--av-muted); font-size: 14.5px; line-height: 1.45;
+    margin: 6px 0 0 0;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
 }
 .av-meta {
     display: flex; gap: 0.75rem; align-items: center;
-    margin-top: 0.5rem; font-size: 11.5px; color: var(--av-muted);
+    margin-top: 0.6rem; font-size: 13px; color: var(--av-muted);
     flex-wrap: wrap;
 }
 .av-pill {
     display: inline-flex; align-items: center;
-    padding: 2px 8px; border-radius: 999px;
-    font-size: 11px; border: 1px solid var(--av-border);
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 12.5px; border: 1px solid var(--av-border);
     color: var(--av-muted); background: var(--av-bg);
 }
 .av-pill.accent {
@@ -615,7 +637,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 }
 .av-pill.manual {
     background: var(--av-accent); color: white; border: none;
-    font-weight: 700; font-size: 10px;
+    font-weight: 700; font-size: 11.5px;
 }
 .av-dot {
     display: inline-block; width: 8px; height: 8px;
@@ -630,7 +652,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     border-radius: 0.375rem;
     border: 1px solid var(--av-border);
     background: var(--av-surface);
-    font-size: 13px;
+    font-size: 15px;
     display: inline-flex; gap: 0.5rem; align-items: center;
 }
 .av-counter.over {
@@ -643,7 +665,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 
 .av-live-strip {
     display: inline-flex; gap: 0.75rem;
-    font-size: 12px; color: var(--av-muted);
+    font-size: 13.5px; color: var(--av-muted);
     font-family: ui-monospace, Menlo, monospace;
 }
 .av-live-strip .cell { display: inline-flex; gap: 4px; }
