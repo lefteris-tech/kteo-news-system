@@ -124,16 +124,16 @@ check 'source_logo_path'     "$STAGE/pages/curation.py" "S5.2 logo_path access"
 
 echo
 echo "================================================================"
-echo " Step 4/9: Compile-check (no cache writes)"
+echo " Step 4/9: Compile-check (syntax only, no bytecode write)"
 echo "================================================================"
 PYTHONDONTWRITEBYTECODE=1 "$NA/venv/bin/python3" -c "
-import py_compile, sys
+import sys
 for f in ['$STAGE/publish_curated.py', '$STAGE/news_aggregator.py',
           '$STAGE/kteo_curate.py',     '$STAGE/pages/curation.py']:
     try:
-        py_compile.compile(f, doraise=True, cfile='/dev/null')
+        with open(f) as fh: compile(fh.read(), f, 'exec')
         print(f'  ✓ {f}')
-    except py_compile.PyCompileError as e:
+    except SyntaxError as e:
         print(f'  ✗ {f}: {e}'); sys.exit(1)
 "
 
