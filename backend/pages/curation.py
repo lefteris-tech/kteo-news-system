@@ -88,12 +88,37 @@ def render_row(item: dict):
     )
     snippet = (item.get("body_first_para") or "")[:180]
 
-    src_pill = (
-        '<span class="av-pill manual">M</span> '
-        '<span style="color:var(--av-accent)">Χειροκίνητο</span>'
-        if is_manual
-        else ''
-    )
+    # S5.2 — source attribution pill (logo + name)
+    src_name = (item.get("source_name") or "").strip()
+    src_logo_path = item.get("source_logo_path") or ""
+    if is_manual:
+        source_html = (
+            '<span class="av-source-pill manual">'
+            '<span class="initial">✋</span>'
+            '<span class="name">Χειροκίνητο</span>'
+            '</span>'
+        )
+    elif src_name and src_logo_path:
+        # Logos are served by nginx on kteo-news.dronepros.gr (same Pi)
+        filename = src_logo_path.rsplit("/", 1)[-1]
+        logo_url = f"https://kteo-news.dronepros.gr/news/logos/{filename}"
+        source_html = (
+            f'<span class="av-source-pill">'
+            f'<img src="{logo_url}" alt="{src_name}" loading="lazy" />'
+            f'<span class="name">{src_name}</span>'
+            f'</span>'
+        )
+    elif src_name:
+        # Source registered but no logo yet — fall back to colored letter
+        initial = (src_name[:1] or "?").upper()
+        source_html = (
+            f'<span class="av-source-pill">'
+            f'<span class="initial">{initial}</span>'
+            f'<span class="name">{src_name}</span>'
+            f'</span>'
+        )
+    else:
+        source_html = ""
 
     card_cls = "av-card selected" if is_selected else "av-card"
 
@@ -102,7 +127,7 @@ def render_row(item: dict):
 
     with col_content:
         st.markdown(f"""
-<div class="{card_cls}"><div class="row"><div class="av-thumb" style="{thumb_bg}"></div><div style="flex:1;min-width:0;"><div class="av-title">{item['title']}</div><div class="av-snippet">{snippet}</div><div class="av-meta">{src_pill}<span>{age}</span></div></div></div></div>
+<div class="{card_cls}"><div class="row"><div class="av-thumb" style="{thumb_bg}"></div><div style="flex:1;min-width:0;"><div class="av-title">{item['title']}</div><div class="av-snippet">{snippet}</div><div class="av-meta">{source_html}<span>{age}</span></div></div></div></div>
         """, unsafe_allow_html=True)
 
     with col_cat:

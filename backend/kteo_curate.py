@@ -123,17 +123,25 @@ def require_admin():
 def get_pending_items(date: Optional[str] = None,
                       category: Optional[str] = None,
                       statuses: tuple = ("pending", "selected")) -> list[dict]:
+    """S5.2: LEFT JOIN sources so each pending row carries the source name
+    and logo_path. The curator UI uses these to render the source avatar
+    pill on each article card. NULL-safe for manual items (source_id=NULL)
+    and for sources that don't have a logo yet."""
     date = date or today_str()
     conn = get_db()
-    where = ["fetch_date = ?", f"status IN ({','.join('?' * len(statuses))})"]
+    where = ["pc.fetch_date = ?", f"pc.status IN ({','.join('?' * len(statuses))})"]
     params = [date, *statuses]
     if category:
-        where.append("classified_category = ?")
+        where.append("pc.classified_category = ?")
         params.append(category)
     rows = conn.execute(f"""
-        SELECT * FROM pending_curation
+        SELECT pc.*,
+               s.name      AS source_name,
+               s.logo_path AS source_logo_path
+          FROM pending_curation pc
+          LEFT JOIN sources s ON s.id = pc.source_id
          WHERE {' AND '.join(where)}
-         ORDER BY haiku_confidence DESC, id
+         ORDER BY pc.haiku_confidence DESC, pc.id
     """, params).fetchall()
     return [dict(r) for r in rows]
 
@@ -529,7 +537,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     border: 1px solid var(--av-border);
     background: var(--av-surface);
     color: var(--av-ink);
-    font-size: 14.5px;
+    font-size: 15.5px;
 }
 .stButton > button:hover { border-color: var(--av-muted); color: var(--av-ink); }
 .stButton > button[kind="primary"] {
@@ -549,7 +557,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     color: var(--av-muted);
     background: transparent;
     padding: 0.75rem 1rem;
-    font-size: 14.5px;
+    font-size: 15.5px;
 }
 .stTabs [aria-selected="true"] {
     color: var(--av-accent);
@@ -560,6 +568,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     background-color: var(--av-bg);
     border-color: var(--av-border);
     color: var(--av-ink);
+    font-size: 15px;
 }
 
 [data-testid="stDataFrame"] { background: var(--av-surface); }
@@ -586,8 +595,8 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 .av-status-strip .pulse.warning { background: var(--av-warning); }
 .av-status-strip .pulse.danger  { background: var(--av-danger); }
 @keyframes av-pulse { 0%, 100% {opacity:1;} 50% {opacity:0.4;} }
-.av-status-strip .label { color: var(--av-muted); font-size: 13.5px; }
-.av-status-strip .value { color: var(--av-ink); font-weight: 600; }
+.av-status-strip .label { color: var(--av-muted); font-size: 14.5px; }
+.av-status-strip .value { color: var(--av-ink); font-weight: 600; font-size: 15px; }
 .av-status-strip .sep   { width:1px; height:1.25rem; background: var(--av-border); }
 
 /* Article card */
@@ -610,24 +619,24 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
     background-size: cover; background-position: center;
 }
 .av-title {
-    color: var(--av-ink); font-weight: 600; font-size: 17px;
+    color: var(--av-ink); font-weight: 600; font-size: 19px;
     line-height: 1.3; margin: 0;
 }
 .av-snippet {
-    color: var(--av-muted); font-size: 14.5px; line-height: 1.45;
+    color: var(--av-muted); font-size: 16px; line-height: 1.45;
     margin: 6px 0 0 0;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
 }
 .av-meta {
     display: flex; gap: 0.75rem; align-items: center;
-    margin-top: 0.6rem; font-size: 13px; color: var(--av-muted);
+    margin-top: 0.6rem; font-size: 14.5px; color: var(--av-muted);
     flex-wrap: wrap;
 }
 .av-pill {
     display: inline-flex; align-items: center;
     padding: 3px 10px; border-radius: 999px;
-    font-size: 12.5px; border: 1px solid var(--av-border);
+    font-size: 13.5px; border: 1px solid var(--av-border);
     color: var(--av-muted); background: var(--av-bg);
 }
 .av-pill.accent {
@@ -637,7 +646,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 }
 .av-pill.manual {
     background: var(--av-accent); color: white; border: none;
-    font-weight: 700; font-size: 11.5px;
+    font-weight: 700; font-size: 12.5px;
 }
 .av-dot {
     display: inline-block; width: 8px; height: 8px;
@@ -647,12 +656,35 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 .av-dot.medium { background: var(--av-warning); }
 .av-dot.low    { background: var(--av-danger); }
 
+/* S5.2 — source attribution pill on each article card */
+.av-source-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 3px 11px 3px 3px; border-radius: 999px;
+    background: var(--av-bg); border: 1px solid var(--av-border);
+    font-size: 13.5px; color: var(--av-muted);
+}
+.av-source-pill img {
+    width: 24px; height: 24px; border-radius: 50%;
+    object-fit: cover; background: var(--av-surface);
+    display: block;
+}
+.av-source-pill .initial {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--av-accent); color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+}
+.av-source-pill .name { color: var(--av-muted); font-weight: 500; }
+.av-source-pill.manual { border-color: rgba(255,87,34,0.4); }
+.av-source-pill.manual .name { color: var(--av-accent); }
+
 .av-counter {
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
     border: 1px solid var(--av-border);
     background: var(--av-surface);
-    font-size: 15px;
+    font-size: 16px;
     display: inline-flex; gap: 0.5rem; align-items: center;
 }
 .av-counter.over {
@@ -665,7 +697,7 @@ h1, h2, h3, h4, p, span, label { color: var(--av-ink); }
 
 .av-live-strip {
     display: inline-flex; gap: 0.75rem;
-    font-size: 13.5px; color: var(--av-muted);
+    font-size: 14.5px; color: var(--av-muted);
     font-family: ui-monospace, Menlo, monospace;
 }
 .av-live-strip .cell { display: inline-flex; gap: 4px; }
