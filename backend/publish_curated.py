@@ -1,34 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-publish_curated.py — KTEO Curation Platform, Sprint 3.1
+publish_curated.py — KTEO Curation Platform, Sprint 6
 ========================================================
-Sprint: 3.1, version: 2
-Generated: 2026-05-14
+Sprint: 6, version: 1
+Generated: 2026-05-21
 
-ARCHITECTURE CHANGE FROM SPRINT 2:
-In Sprint 3.1, fetch_raw stores items with haiku_summary=NULL (no summary
-generated at fetch time). publish_curated now runs Claude Haiku
-summarization for each selected item BEFORE writing XML — but only for
-items the user has approved. This is the human-in-the-loop principle:
-Claude only summarizes content humans approved for screens.
+CHANGES FROM SPRINT 3.1:
+- VALIDATION (Sprint 6): if any selected row has classified_category=NULL,
+  abort with exit code 4 BEFORE any Haiku call. The curator must assign
+  a category in the Streamlit UI before publishing — no implicit fallback.
+- FAIL-FAST summarization (Sprint 6): if Claude Haiku returns an error
+  for ANY selected item, abort the entire publish run with exit code 3.
+  Items remain status='selected' for the curator to retry once the API
+  recovers. No fallback to truncated body text.
+
+The fail-fast behaviour intentionally surfaces API outages (e.g. the
+2026-05-21 incident where the Anthropic monthly cap was reached) instead
+of silently degrading screen content quality. Curators retry; ops fixes
+the underlying issue.
+
+KEPT FROM SPRINT 3.1:
+- On-demand summarization at publish time (no fetch-time API calls).
+- Items already summarised in a prior attempt are skipped (idempotent).
 
 Pipeline:
   [1] Fetch selected rows (status='selected')
-  [2] Summarize items where haiku_summary is empty (Sprint 3.1 NEW)
-  [3] Group by category, build Article objects with fresh summaries
-  [4] Build & write XML for each category (atomic)
-  [5] Mark rows status='published'
-  [6] Insert publish_log row
-  [7] subprocess: carry_over.py
-  [8] subprocess: playlist_sync.py (unless --no-yodeck)
+  [2] Validate all selected have classified_category (Sprint 6 NEW)
+  [3] Summarize items where haiku_summary is empty (fail-fast)
+  [4] Group by category, build Article objects
+  [5] Build & write XML for each category (atomic)
+  [6] Mark rows status='published'
+  [7] Insert publish_log row
+  [8] subprocess: carry_over.py
+  [9] subprocess: playlist_sync.py (unless --no-yodeck)
 
 Exit codes:
   0 = success
   1 = nothing selected
   2 = playlist_sync failed (XMLs were written though)
-  3 = summarization failed for too many items
-  >3 = unexpected error
+  3 = summarization failed (Sprint 6: ANY failure aborts; was: ≥half)
+  4 = selected rows missing classified_category (Sprint 6 NEW)
+  >4 = unexpected error
 """
 
 import argparse
@@ -150,7 +163,7 @@ def insert_publish_log(
 
 
 # -----------------------------------------------------------------------------
-# Sprint 3.1: on-demand summarization
+# Sprint 3.1: on-demand summarization (Sprint 6: fail-fast on any failure)
 # -----------------------------------------------------------------------------
 
 SUMMARIZE_PROMPT = """Είσαι expert copywriter για digital signage σε δημόσιο χώρο (αίθουσα αναμονής KTEO).
@@ -228,7 +241,7 @@ def summarize_missing(
         log.info("All selected items already have summaries — skipping summarize step")
         return 0, 0
 
-    log.info("Sprint 3.1 — summarizing %d items", len(needs))
+    log.info("Summarizing %d items (fail-fast on any Haiku error)", len(needs))
 
     if dry_run:
         log.info("[dry-run] would call Claude Haiku %d times for summaries", len(needs))
@@ -241,7 +254,6 @@ def summarize_missing(
 
     client = Anthropic(api_key=api_key)
     ok_count = 0
-    fail_count = 0
     for i, row in enumerate(needs, 1):
         log.info("  [%d/%d] %s", i, len(needs), row["title"][:60])
         summary = summarize_for_screen(
@@ -254,25 +266,30 @@ def summarize_missing(
                 "UPDATE pending_curation SET haiku_summary=? WHERE id=?",
                 (summary, row["id"]),
             )
-            row["haiku_summary"] = summary  # update in-memory copy too
+            row["haiku_summary"] = summary
             ok_count += 1
             log.debug("    → %d chars: %s", len(summary), summary[:80])
         else:
-            # Fallback: use first 160 chars of body so XML isn't empty
-            fallback = (row.get("body_first_para") or row.get("title") or "")[:160]
-            conn.execute(
-                "UPDATE pending_curation SET haiku_summary=? WHERE id=?",
-                (fallback, row["id"]),
-            )
-            row["haiku_summary"] = fallback
-            fail_count += 1
-            log.warning("    → fallback used (Claude failed)")
+            # Sprint 6: FAIL-FAST. No fallback. Persist what we have so far,
+            # then abort. The curator retries when the API recovers — items
+            # already summarised in this run will be skipped on retry.
+            conn.commit()
+            log.error("=" * 60)
+            log.error("FAIL-FAST: Claude Haiku failed on item %d/%d (id=%d).",
+                      i, len(needs), row["id"])
+            log.error("Title: %s", row["title"][:100])
+            log.error("Items remain status='selected' and can be republished")
+            log.error("once the API recovers. %d items already summarised in",
+                      ok_count)
+            log.error("this run are persisted and will be skipped on retry.")
+            log.error("=" * 60)
+            return ok_count, 1
 
         time.sleep(SUMMARY_RATE_LIMIT_SEC)
 
     conn.commit()
-    log.info("Summarization: %d ok, %d fallback", ok_count, fail_count)
-    return ok_count, fail_count
+    log.info("Summarization: %d ok, 0 failed", ok_count)
+    return ok_count, 0
 
 
 # -----------------------------------------------------------------------------
@@ -350,7 +367,7 @@ def run_subprocess(cmd: list, description: str, timeout: int = 120) -> bool:
 # -----------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="publish_curated (Sprint 3.1)")
+    parser = argparse.ArgumentParser(description="publish_curated (Sprint 6)")
     parser.add_argument("--db", default=DEFAULT_DB)
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--fetch-date", default=None,
@@ -386,7 +403,7 @@ def main() -> int:
     total = sum(len(v) for v in grouped.values())
 
     log.info("=" * 60)
-    log.info("publish_curated — Sprint 3.1")
+    log.info("publish_curated — Sprint 6")
     log.info("  fetch_date     : %s", args.fetch_date)
     log.info("  output_dir     : %s", output_dir)
     log.info("  triggered_by   : %s", args.triggered_by)
@@ -400,10 +417,34 @@ def main() -> int:
         log.warning("No items selected for %s — nothing to publish.", args.fetch_date)
         return 1
 
-    # Sprint 3.1: summarize before XML write
+    # Sprint 6 validation: every selected item MUST have a category assigned
+    # by the curator. fetch_raw no longer classifies — categorisation is the
+    # curator's responsibility, surfaced in the Streamlit UI before "select".
+    conn.row_factory = sqlite3.Row
+    uncategorised = conn.execute("""
+        SELECT id, title FROM pending_curation
+         WHERE fetch_date = ? AND status = 'selected'
+           AND (classified_category IS NULL OR classified_category = '')
+         ORDER BY id
+    """, (args.fetch_date,)).fetchall()
+    if uncategorised:
+        log.error("=" * 60)
+        log.error("ABORT: %d selected item(s) have no classified_category.",
+                  len(uncategorised))
+        log.error("The curator must assign a category to each selected item")
+        log.error("via the Streamlit Σημερινή Επιμέλεια page before publishing.")
+        log.error("Items without categories:")
+        for r in uncategorised:
+            log.error("  id=%-5d %s", r["id"], r["title"][:80])
+        log.error("=" * 60)
+        conn.close()
+        return 4
+
+    # Sprint 6: summarize before XML write — FAIL-FAST on any Haiku error
     ok, failed = summarize_missing(conn, grouped, dry_run=args.dry_run)
-    if failed and failed >= total // 2:
-        log.error("Too many summarization failures (%d/%d) — aborting", failed, total)
+    if failed:
+        log.error("Summarization aborted on first failure (Sprint 6 fail-fast)")
+        conn.close()
         return 3
 
     # Build XMLs
