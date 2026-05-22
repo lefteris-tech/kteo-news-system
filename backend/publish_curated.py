@@ -94,12 +94,21 @@ def ensure_env_loaded() -> None:
 def fetch_selected_rows(
     conn: sqlite3.Connection, fetch_date: str
 ) -> dict[str, list[dict]]:
-    """Group selected rows by category slug. Returns dicts (mutable for summary update)."""
+    """Group selected rows by category slug. Returns dicts (mutable for summary update).
+
+    S5.1: LEFT JOIN sources so each row carries source name + logo_path
+    for the widget avatar pill. NULL-safe when source_id is missing
+    (manual injections) or when the source has no logo yet.
+    """
     conn.row_factory = sqlite3.Row
     rows = conn.execute("""
-        SELECT * FROM pending_curation
-         WHERE fetch_date = ? AND status = 'selected'
-         ORDER BY classified_category, id
+        SELECT pc.*,
+               s.name      AS source_name,
+               s.logo_path AS source_logo_path
+          FROM pending_curation pc
+          LEFT JOIN sources s ON s.id = pc.source_id
+         WHERE pc.fetch_date = ? AND pc.status = 'selected'
+         ORDER BY pc.classified_category, pc.id
     """, (fetch_date,)).fetchall()
 
     grouped: dict[str, list[dict]] = {slug: [] for slug in SLUG_MAP.values()}
@@ -271,7 +280,12 @@ def summarize_missing(
 # -----------------------------------------------------------------------------
 
 def row_to_article(row: dict) -> Article:
-    """Build an Article instance from a pending_curation row (dict)."""
+    """Build an Article instance from a pending_curation row (dict).
+
+    S5.1: row may now carry `source_name` and `source_logo_path` joined
+    in from the sources table. Both are NULL-tolerant. The on-disk path
+    is converted to a public URL the widget can fetch over HTTPS.
+    """
     pub_dt_str = row["pub_date"]
     pub_dt = datetime.fromisoformat(pub_dt_str)
     if pub_dt.tzinfo is None:
@@ -284,6 +298,15 @@ def row_to_article(row: dict) -> Article:
         summary=row["haiku_summary"] or "",
     )
     art.classified_category = SLUG_TO_CATEGORY[row["classified_category"]]
+
+    # S5.1 — source attribution for widget avatar pill
+    art.source_name = row.get("source_name") or ""
+    logo_path = row.get("source_logo_path") or ""
+    if logo_path:
+        # nginx serves /var/www/html/news/logos/ at /news/logos/
+        filename = logo_path.rsplit("/", 1)[-1]
+        art.source_logo_url = f"https://kteo-news.dronepros.gr/news/logos/{filename}"
+
     return art
 
 
