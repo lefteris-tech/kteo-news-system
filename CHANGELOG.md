@@ -8,9 +8,11 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Sprint 5.1: Source avatar pill in news widget
+## [0.9.0] — 2026-05-22 — v0.9-s5.2: Sprints 5.1 + 6 + 5.2 reconciliation
 
-### Added
+This release brings four sprints into main in one merge (`d3b585b`) after a brief reconciliation: Sprint 6 had been deployed directly to the Pi but never pushed to GitHub. The reconciliation restored S6 in the repo and re-applied S5.1 + S5.2 on top of it cleanly.
+
+### Sprint 5.1 — Source avatar pill in news widget (Added)
 - `backend/source_logo.py` — multi-strategy logo fetcher (Clearbit → HTML parse → Google favicon) with Pillow-based 128×128 RGBA PNG normalization
 - `backend/backfill_logos.py` — one-off backfill for sources registered before S5.1
 - `db/migrations/S5_1-source_logo.sql` — adds `sources.logo_path TEXT` (NULL-able)
@@ -18,21 +20,43 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - `docs/sprints/S5_1-deploy.md` — 12-step runbook with rollback per component
 - `<kteo:source_name>` and `<kteo:source_logo>` custom-namespace elements in the per-category RSS XML (`xmlns:kteo="https://kteo-news.dronepros.gr/ns/1.0"` declared on `<rss>`)
 
-### Changed
+### Sprint 5.1 — Changed
 - `backend/pages/sources.py` — full rewrite: avatar column in the list, "Auto-fetch" + upload + clear + re-fetch buttons on the form and per row
 - `backend/publish_curated.py` — `fetch_selected_rows` now LEFT-JOINs `sources`; `row_to_article` populates `Article.source_name` and `Article.source_logo_url`
 - `backend/news_aggregator.py` — `Article` gains `source_name` and `source_logo_url`; `build_rss_xml` emits the new namespace + per-item source elements (only when populated)
 - `backend/kteo_curate.py` — `add_source()` accepts `logo_path=None`
-- `widget/css/style.css` — `.slide-meta .dot` retained for backward compat; new `.source-avatar` (circle), `.source-avatar.no-logo` (colored-letter fallback)
+- `widget/css/style.css` — new `.source-avatar` (circle), `.source-avatar.no-logo` (colored-letter fallback)
 - `widget/js/widget.js` — parses `kteo:source_*` from each item (namespace-agnostic via `getElementsByTagNameNS`), renders a circular avatar; rendering decoupled from `show_date` so the source pill shows even when timestamps are hidden
 - `widget/news.html` — cache-buster bumped `widget.js?v=5` → `widget.js?v=6`
 - `db/schema.sql` — consolidated to reflect the post-S5.1 state
 
+### Sprint 6 — Human-controlled classification (Changed)
+- **`backend/fetch_raw.py`** — removed the Claude Haiku classification step entirely. Articles are pulled from RSS, deduplicated, and inserted into `pending_curation` with `classified_category=NULL`. The classifier is no longer invoked at fetch time.
+- **`backend/publish_curated.py`** — added pre-publish validation that refuses to write XML if any selected row has `classified_category=NULL` (exit code 4). Summarisation is now **fail-fast**: the first Haiku failure aborts the entire run (exit code 3), no fallback to truncated body text. Items already summarised in the failing run are persisted and skipped on retry.
+- **`backend/pages/curation.py`** — major UI redesign. Removed the 6 category tabs. Single unified queue with per-row category dropdown ("— Διάλεξε Κατηγορία —" placeholder). The Επιλογή checkbox is disabled until a category is chosen. Clearing the category on a selected row auto-deselects.
+- **`backend/kteo_curate.py`** — added `set_category()` helper.
+- `docs/sprints/S6-deploy.md` — Sprint 6 deploy runbook with API-cost comparison table
+
+### Sprint 5.2 — Curator UI source pill + typography (Changed)
+- `backend/kteo_curate.py` — `get_pending_items()` now LEFT-JOINs `sources` to surface source name + logo_path on every pending row
+- `backend/pages/curation.py` — source avatar pill rendered on each article card with 4 fallback paths (manual → ✋, registered+logo → 24px circle, registered no-logo → colored-letter circle, orphan → no pill)
+- `backend/kteo_curate.py` — CSS bumps across the curator UI: title 17→19px, snippet 14.5→16px, meta 13→14.5px, buttons/tabs +1px; new `.av-source-pill` styles
+
+### Deploy infrastructure
+- `deploy/s5.1-on-s6-deploy.sh` — superseded by s5.2
+- `deploy/s5.2-full-deploy.sh` — self-contained deploy script that fetches all 4 reconciled files from a tagged ref, backs up, validates 13 features, compiles, installs, restarts service, dry-runs publish, verifies HTTP 200
+
+### Operational impact
+- Anthropic API outages no longer break the curator queue — `fetch_raw` makes zero API calls
+- Per-day API spend dropped from `(fetch + publish)` ~40–55 calls to `publish only` ~5–15 calls
+- Curator picks the category explicitly — no classifier errors reach production
+- Source attribution visible both on TV screens (widget) and in the curator queue
+
 ### Notes
-- Avatar-only design: source name is in `aria-label`/`title` (accessibility + hover tooltip), not rendered as visible text
-- Items without a registered source (manual injections, or items pre-dating their source registration) degrade cleanly — the kteo elements are omitted and the widget renders no avatar
-- No Anthropic API calls anywhere in this change; the active spend-cap incident does not block the deploy
-- Logo file naming uses a stable slug derived from the source URL (`newsbeast.gr/feed` → `newsbeast.png`), served as static assets under `/var/www/html/news/logos/`
+- Sprint 6 work was originally on `feature/sprint-6-human-classification`; reconciliation captured it into the main line history via `d3b585b`
+- Avatar logos for currently registered sources: `newsbeast.png` (id=1), `news.png` (id=15)
+- Widget v=6 is backward-compatible: items without `<kteo:source_*>` elements (e.g. carry-over from before S5.1) render with no avatar, no error
+- No Anthropic API calls anywhere in S5.1 or S5.2; deploys remained unaffected by the 2026-05-21 spend-cap incident
 
 ---
 
