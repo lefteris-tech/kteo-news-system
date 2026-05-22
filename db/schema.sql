@@ -1,6 +1,6 @@
 -- =============================================================================
 -- schema.sql — Consolidated current schema for KTEO News System
--- Generated: 2026-05-21 (post Sprint 5.0)
+-- Generated: 2026-05-22 (post Sprint 5.1)
 -- =============================================================================
 --
 -- Apply this to a fresh news_cache.db to get the current production schema.
@@ -10,6 +10,7 @@
 --   Phase 1  — seen_articles
 --   S1        — sources, filters, pending_curation, users, publish_log
 --   S5.0      — pending_curation.auto_filter_rule_id + index
+--   S5.1      — sources.logo_path (avatar pill in widget)
 -- =============================================================================
 
 -- Phase 1: deduplication cache (newsbeast.gr/feed dedup)
@@ -22,6 +23,7 @@ CREATE TABLE seen_articles (
 );
 
 -- S1: RSS source registry (managed via Streamlit Πηγές page)
+-- S5.1: added logo_path
 CREATE TABLE sources (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL,
@@ -29,6 +31,7 @@ CREATE TABLE sources (
     type            TEXT    NOT NULL DEFAULT 'rss',     -- rss | atom
     enabled         INTEGER NOT NULL DEFAULT 1,
     category_hint   TEXT,                                -- optional pre-bias
+    logo_path       TEXT,                                -- /var/www/html/news/logos/<slug>.png
     created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
